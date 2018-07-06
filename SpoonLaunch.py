@@ -47,6 +47,14 @@ class LaunchpadState():
         print("finished setting up state")
         return
     
+    def send_load_change(self, loop_message,new_index):
+        temp_s = loop_message
+        temp_m = new_index
+        self.osc_client.send_message(temp_s, temp_m  )
+        print("sent message : {}   {}".format(temp_s, temp_m))
+        return
+        
+    
     def set_slice_led(self,loop_i, slice_i):
         state = self.slice_states[loop_i][slice_i]
         led_code = self.slice_mode_codes[state]
@@ -78,6 +86,15 @@ class LaunchpadState():
         
     def next_slice_mode(self,loop_number, slice_number, new_mode):
         # increment slice
+        vol_vals=[0.,0.1,0.3,0.4,0.5,0.6,0.8,1.0]
+        if(new_mode=="VOL"):
+        # send a volume message!
+            temp_s = "/loop/{}/volume".format(loop_number+1)
+            temp_m = vol_vals[slice_number]
+            self.osc_client.send_message(temp_s, temp_m  )
+            print("sent message : {}   {}".format(temp_s, temp_m))
+            return
+        
         if new_mode == None:
             val = self.slice_states[loop_number][slice_number]
             val+=1
@@ -135,13 +152,21 @@ class LaunchpadState():
         self.set_loop_led(loop_number)
         print("sent message {} {}".format(temp_s,temp_m))
         return
+        
+    def send_all_loop_jump(self, new_slice_number):
+        for i in range(0,4):
+            temp_s="/loop/{}/jump".format(i+1)
+            temp_m = self.osc_client.send_message(temp_s, new_slice_number)
+            print("sent message {} {}".format(temp_s,new_slice_number))
+        return
 
 #########################################################
 
 held_button = None
 
 #dictionary of messages that can be sent.
-tete = {0:'PLY',1:'MTE',2:'SKP',3:'RVS',4:'RND',5:'DBL',6:'HLF'}
+tete = {0:'PLY',1:'MTE',2:'SKP',3:'RVS',4:'RND',5:'DBL',6:'HLF', 9:'VOL' , 
+    100:'/loop/1/file', 101:'/loop/2/file',102:'/loop/3/file', 103:'/loop/4/file'}
 #associated colour codes
 colours = {0:64, 1:5, 2:0, 3:9, 4:67, 5:54, 6:40}
 
@@ -157,7 +182,39 @@ def draw_hold_buttons():
     lp.LedCtrlXYByCode(start_x+4,start_y,67) # random
     lp.LedCtrlXYByCode(start_x+5,start_y,54) # random
     lp.LedCtrlXYByCode(start_x+6,start_y,40) # random
+    return
+    
+def track_loading_buttons(midi_message):
+    global held_button, tete
+    # track load buttons are 0-3 for tracks 1-4
+    btn_x = midi_message[0]
+    
+    #if velocity = 0 set held_button to None
+    if(midi_message[2]<10):
+        held_button = None
+        return
+    
+    if (btn_x<0 or btn_x>3):
+        # do nothing 
+        
+        return
+    offset = btn_x+100
+    held_button = tete[offset]
+    print("setting load mode {}".format(held_button))
+    return
 
+def change_track_load(midi_message, lpsnst):
+    global held_button
+    # convert x y to a number
+    btn_x = midi_message[0]
+    btn_y = midi_message[1]-1
+    file_index = btn_y*8+btn_x
+    # send file index 
+    lpsnst.send_load_change(held_button, file_index)
+    return
+    
+    
+    
 def track_hold_buttons(midi_message):
     global held_button, tete, colours
     modes=['PLY','MTE','SKP','RVS','RND','DBL','HLF']
@@ -176,23 +233,48 @@ def track_hold_buttons(midi_message):
         print("button held {} {}".format(midi_message, held_button))
     return
 
-def decode_xy(midi_message, lnchpdState):
+def decode_xy(midi_message, lnchpdState, verbose_mode):
     # if button is one of the hold buttons, then have it handled.
+    poorpractice=['/loop/1/file', '/loop/2/file','/loop/3/file', '/loop/4/file']
+    if(verbose_mode):
+        print("button recieved {}".format(midi_message))
+    
     if(midi_message[1] == 6):
         track_hold_buttons(midi_message)
         return
+    #file loading we need to do something fancy here.    
+    if(midi_message[1] == 9):
+        track_loading_buttons(midi_message)
+        return
+    
+    
     # check velocity if 0 do nothing
     if(midi_message[2] <10):
         return
+        
+    if(held_button in poorpractice):
+        change_track_load(midi_message, lnchpdState)
+        return
+    
     val_x = midi_message[0] # 0 -9 0-7 are slices, 8 and 9 are loops 
     val_y = midi_message[1] # 1-4
     # if x out of range, do nothing
     if(val_x <0 or val_x > 9):
         return
     # if y out of range, do nothing
-    if(val_y <1 or val_y > 4):
+    if(val_y <0 or val_y > 4): #1-4 are slices.  0 is top row for all jump
         return
     # because i'm a numpty, update val_y to 0-3
+    
+    if(val_y==0):
+        # do an all slice jump
+        if(val_x<0 or val_x>7):
+            # error,
+            print("error")
+            return
+        lnchpdState.send_all_loop_jump(val_x)
+        return
+    
     val_y=val_y-1
     # print("y {} x {}".format(val_y,val_x))
     if(val_x == 8):
@@ -205,7 +287,7 @@ def decode_xy(midi_message, lnchpdState):
     return
 
 
-def main():
+def main(verbose_mode):
     """the main loop"""
     while True:
         # 500Hz refresh rate
@@ -214,7 +296,7 @@ def main():
         # only do som
         if(len(ret_d)>0):
             # print(ret_d)
-            decode_xy(ret_d, lps) 
+            decode_xy(ret_d, lps,verbose_mode) 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -222,6 +304,8 @@ if __name__ == "__main__":
         help="The ip of the OSC server")
     parser.add_argument("--port", type=int, default=5080,
         help="The port the OSC server is listening on")
+    
+    parser.add_argument("--print_messages",action="store_true",help="print the midi message recieved")
     
     args = parser.parse_args()
     client = udp_client.SimpleUDPClient(args.ip, args.port)
@@ -243,4 +327,4 @@ if __name__ == "__main__":
     draw_hold_buttons()
     
     #start endless loop
-    main()
+    main(args.print_messages)
