@@ -15,7 +15,7 @@ they are:
 ### Launchpad Pro Layout
 Below is the general layout of the launchpad with some indicators to show what they do.
 
-`
+```
     0      1   2   3   4   5   6   7   8      9
              +---+---+---+---+---+---+---+---+ 
              | . |   | . |   |   |   |   |   |  <-  ALL SLICE JUMP       
@@ -43,7 +43,7 @@ TRK 4 | 4 |  |   |   |   |   |   |   |   |   |  | M | <-Track Playback Mode
   LOAD ->    | L1| L2| L3| L4|   |   |   |   |         9
              +---+---+---+---+---+---+---+---+ 
 
-`
+```
 ### Slice buttons.
 
 
