@@ -52,6 +52,28 @@ class LaunchpadState():
         temp_m = new_index
         self.osc_client.send_message(temp_s, temp_m  )
         print("sent message : {}   {}".format(temp_s, temp_m))
+        #We don't know if the file load was sucessful or not.  
+        # We need to send all the slice states for this loop to 
+        #make it match what we're displaying
+
+        #sleep for a little bit. Loading a file seems to get messages lost.
+        time.sleep(0.1)
+
+        loopi_i=int(loop_message[6])-1
+
+        for j in range(0,8):
+            temp_s = self.osc_slice_string.format(loopi_i+1,j)
+            temp_m = self.slice_modes[self.slice_states[loopi_i][j]]
+            self.osc_client.send_message(temp_s,temp_m)
+            print("sent message: {} {}".format(temp_s, temp_m))
+        
+        #send the current playing mode.
+        temp_s = "/loop/{}/mode".format(loopi_i+1)
+        temp_m = self.loop_modes[self.loop_states[loopi_i]]
+        self.osc_client.send_message(temp_s,temp_m)
+        print("sent message {} {}".format(temp_s, temp_m))
+
+
         return
         
     
